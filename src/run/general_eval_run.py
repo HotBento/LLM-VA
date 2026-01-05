@@ -41,26 +41,26 @@ batch_size = 8
 command_list = []
 for dataset in dataset_list:
     for m in model_list:
-        if os.path.exists(f"result_1215/general_ability/{dataset}/{m}/results.csv"):
+        if os.path.exists(f"result/general_ability/{dataset}/{m}/results.csv"):
             logger.info(f"Skip {m} in {dataset} because result already exists")
             continue
-        command = f"python src/general_eval.py --dataset_name {dataset} --model_type {m} --model_path {model_name_dict[m]} --result_path result_1215/general_ability --batch_size {batch_size} --do_sample --ppid {pid}"
+        command = f"python src/general_eval.py --dataset_name {dataset} --model_type {m} --model_path {model_name_dict[m]} --result_path result/general_ability --batch_size {batch_size} --do_sample --ppid {pid}"
         command_list.append(command)
 
 for dataset in dataset_list:
     for m in model_list:
-        if os.path.exists(f"result_1215/general_ability/{dataset}/{m}-modified/results.csv"):
+        if os.path.exists(f"result/general_ability/{dataset}/{m}-modified/results.csv"):
             logger.info(f"Skip {m}-modified in {dataset} because result already exists")
             continue
-        command = f"python src/general_eval.py --dataset_name {dataset} --model_type {m} --model_path {model_name_dict[m]} --result_path result_1215/general_ability --batch_size {batch_size} --do_sample --modified --modify_path result_1215/lvs_select_st{layer_num_dict[m]}/{m} --ppid {pid}"
+        command = f"python src/general_eval.py --dataset_name {dataset} --model_type {m} --model_path {model_name_dict[m]} --result_path result/general_ability --batch_size {batch_size} --do_sample --modified --modify_path result/llmva-{layer_num_dict[m]}/{m} --ppid {pid}"
         command_list.append(command)
 
 for dataset in dataset_list:
     for m in model_list:
-        if os.path.exists(f"result_1215/general_ability/{dataset}/{m}-random/results.csv"):
+        if os.path.exists(f"result/general_ability/{dataset}/{m}-random/results.csv"):
             logger.info(f"Skip {m}-random in {dataset} because result already exists")
             continue
-        command = f"python src/general_eval.py --dataset_name {dataset} --model_type {m} --model_path {model_name_dict[m]} --result_path result_1215/general_ability --batch_size {batch_size} --do_sample --modified --modify_path result_1215/lvs_select_random_60_{layer_num_dict[m]}/{m} --suffix random --ppid {pid}"
+        command = f"python src/general_eval.py --dataset_name {dataset} --model_type {m} --model_path {model_name_dict[m]} --result_path result/general_ability --batch_size {batch_size} --do_sample --modified --modify_path result/llmva-random-{layer_num_dict[m]}/{m} --suffix random --ppid {pid}"
         command_list.append(command)
 
 # %%
@@ -77,7 +77,6 @@ gpu_semaphores = {cuda_id: Semaphore(process_per_device) for cuda_id in cuda_id_
 def run_command(cuda_id, command):
     global running_processes
     with gpu_semaphores[cuda_id]:
-        # print(if_end, flush=True)
         if if_end:
             return
         full_command = f"CUDA_VISIBLE_DEVICES=\"{cuda_id}\" " + command
@@ -85,9 +84,6 @@ def run_command(cuda_id, command):
             process = subprocess.Popen(
                 full_command, 
                 shell=True,
-                # stdout=subprocess.PIPE,
-                # stderr=subprocess.PIPE,
-                # text=True
             )
             running_processes.append(process)
             

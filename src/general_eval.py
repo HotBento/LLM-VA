@@ -4,7 +4,6 @@ import time
 import pickle
 import pandas as pd
 import torch
-# torch.cuda.set_per_process_memory_fraction(0.4)
 
 from datasets import Dataset, DatasetDict, load_dataset
 from loguru import logger

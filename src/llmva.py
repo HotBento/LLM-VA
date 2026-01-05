@@ -5,7 +5,7 @@ import functools
 import einops
 import gc
 import random
-# random.seed(42)
+random.seed(42)
 import json
 import time
 import pickle
@@ -50,13 +50,19 @@ logging.set_verbosity(logging.ERROR)
 
 def split_texts(texts: List[str], split_ratio: list[float] = [0.8, 0.1, 0.1]):
     """
-    Split the texts into training, validation, and test sets and format them for the model.
-    Args:
-        texts: List of texts to be split.
-        split_ratio: List of ratios for splitting the texts into train, val, and test sets.
-                            The sum of the ratios should be 1.0. If not, they will be normalized.
-    Returns:
-        output: Tuple of three lists: (train_texts, val_texts, test_texts).
+    Split texts into training, validation, and test sets.
+
+    Parameters
+    ----------
+    texts : List[str]
+        List of texts to be split.
+    split_ratio : list[float], optional
+        Ratios for train, val, test sets. Will be normalized if sum != 1.0.
+
+    Returns
+    -------
+    Tuple[List[str], List[str], List[str]]
+        (train_texts, val_texts, test_texts)
     """
     random.shuffle(texts)
     split_ratio = [r / sum(split_ratio) for r in split_ratio]  # Normalize the split ratios
@@ -77,32 +83,39 @@ def eval_answer_rate(
     disable_tqdm: bool = True,
     ):
     """
-    Evaluate the answer rate of the model on the given queries.
-    Args:
-        model: The model to be evaluated.
-        answer_eval_agent: The answer evaluation agent to be used.
-        queries: List of queries to be evaluated.
-        batch_size: The batch size to be used for evaluation.
-    Returns:
-        output: A tuple of three lists: (generated texts, answer booleans, answer rates).
+    Evaluate the answer rate of the model on queries.
+
+    Parameters
+    ----------
+    model : OpenModel
+        The model to be evaluated.
+    answer_eval_agent : QwenAnswerEvaluatorClient
+        The answer evaluation agent.
+    queries : List[str]
+        List of queries to be evaluated.
+    eval_type : Optional[str], optional
+        Evaluation type.
+    batch_size : int, optional
+        Batch size for evaluation.
+    disable_tqdm : bool, optional
+        Disable tqdm progress bar.
+
+    Returns
+    -------
+    Tuple[List[str], List[bool], List[float]]
+        (generated texts, answer booleans, answer rates)
     """
     gen = []
     answer_bools = []
     answer_rates = []
     for q in tqdm(range(0, len(queries), batch_size), disable=disable_tqdm):
         batch = queries[q:q+batch_size]
-        # tensor_batch = tokenize_instructions(tokenizer, format_texts(batch, system_prompt))
-        # batch_gen = model.generate(tensor_batch, 128, temperature=0.0, verbose=False)[:, tensor_batch.shape[1]:]
-        # batch_gen = model.tokenizer.batch_decode(batch_gen, skip_special_tokens=True)
         batch_gen = model.generate(batch, 128, do_sample=False)
-        # batch_answer_bools, batch_answer_rates = answer_eval_agent.evaluate(batch, batch_gen)
         if eval_type is not None:
             answer_eval_agent.input_queue.put((batch, batch_gen, eval_type))
         else:
             answer_eval_agent.input_queue.put((batch, batch_gen))
         gen.extend(batch_gen)
-        # answer_bools.extend(batch_answer_bools)
-        # answer_rates.extend(batch_answer_rates)
     answer_eval_agent.input_queue.join()  # Wait for all requests to be processed
     start_time = time.perf_counter()
     while not answer_eval_agent.result_queue.empty():
@@ -121,14 +134,23 @@ def eval_answer_rate(
 
 def split_by_answered_status(inputs, gens, answer_rates, threshold=0.5):
     """
-    Split the inputs, generated texts, and answer rates into answered and unanswered based on a threshold.
-    Args:
-        inputs: List of input texts.
-        gens: List of generated texts.
-        answer_rates: List of answer rates corresponding to the inputs.
-        threshold: The threshold for determining if an answer is considered answered.
-    Returns:
-        return: A tuple of two tuples: (answered, unanswered), where each contains lists of inputs, gens, and rates.
+    Split inputs, generated texts, and answer rates into answered/unanswered by threshold.
+
+    Parameters
+    ----------
+    inputs : List[str]
+        List of input texts.
+    gens : List[str]
+        List of generated texts.
+    answer_rates : List[float]
+        List of answer rates.
+    threshold : float, optional
+        Threshold for considering answered.
+
+    Returns
+    -------
+    Tuple[Tuple[List, List, List], Tuple[List, List, List]]
+        ((answered_inputs, answered_gens, answered_rates), (unanswered_inputs, unanswered_gens, unanswered_rates))
     """
     answered_inputs = []
     answered_gens = []
@@ -149,12 +171,19 @@ def split_by_answered_status(inputs, gens, answer_rates, threshold=0.5):
 
 def format_texts(texts:list[str], system_prompt: Optional[str] = None) -> List[List[dict]]:
     """
-    Format the input texts into a list of dictionaries suitable for the model's chat template.
-    Args:
-        texts: List of input texts to be formatted.
-        system_prompt: Optional system prompt to be included in the formatted texts.
-    Returns:
-        return: A list of lists, where each inner list contains dictionaries with "role" and "content" keys.
+    Format input texts for the model's chat template.
+
+    Parameters
+    ----------
+    texts : list[str]
+        List of input texts.
+    system_prompt : Optional[str], optional
+        System prompt to include.
+
+    Returns
+    -------
+    List[List[dict]]
+        List of formatted chat dictionaries.
     """
     if system_prompt:
         return [[{"role": "system", "content": system_prompt}, {"role": "user", "content": text}] for text in texts]
@@ -163,12 +192,21 @@ def format_texts(texts:list[str], system_prompt: Optional[str] = None) -> List[L
 
 def tokenize_instructions(tokenizer: PreTrainedTokenizer, instructions: List[List[dict]], add_generation_prompt=True) -> Int[Tensor, "batch seq"]:
     """
-    Tokenize the input instructions using the provided tokenizer.
-    Args:
-        tokenizer: The tokenizer to be used for tokenization.
-        instructions: List of instructions to be tokenized, formatted as a list of dictionaries.
-    Returns:
-        A tensor of tokenized input IDs.
+    Tokenize input instructions using the provided tokenizer.
+
+    Parameters
+    ----------
+    tokenizer : PreTrainedTokenizer
+        Tokenizer to use.
+    instructions : List[List[dict]]
+        Instructions to tokenize.
+    add_generation_prompt : bool, optional
+        Whether to add generation prompt.
+
+    Returns
+    -------
+    Int[Tensor, "batch seq"]
+        Tokenized input IDs tensor.
     """
     return tokenizer.apply_chat_template(
         instructions,
@@ -183,12 +221,20 @@ def tokenize_instructions(tokenizer: PreTrainedTokenizer, instructions: List[Lis
 def batch_run(hooked_model: HookedTransformer, tokenizer: PreTrainedTokenizer, batch: List[List[dict]]):
     """
     Run a batch of inputs through the model and return the cache.
-    Args:
-        hooked_model: The HookedTransformer model to run the inputs through.
-        tokenizer: The tokenizer to be used for tokenization.
-        batch: A list of formatted input instructions.
-    Returns:
-        A dictionary containing the cache of the model's activations.
+
+    Parameters
+    ----------
+    hooked_model : HookedTransformer
+        Model to run inputs through.
+    tokenizer : PreTrainedTokenizer
+        Tokenizer to use.
+    batch : List[List[dict]]
+        Formatted input instructions.
+
+    Returns
+    -------
+    dict
+        Cache of model activations.
     """
     batch_logits, batch_cache = hooked_model.run_with_cache(
         tokenize_instructions(tokenizer, batch, add_generation_prompt=config.add_generation_prompt),
@@ -204,15 +250,25 @@ def batch_run(hooked_model: HookedTransformer, tokenizer: PreTrainedTokenizer, b
 
 def get_cache(hooked_model: HookedTransformer, tokenizer: PreTrainedTokenizer, inputs: List[str], batch_size: int = 16, system_prompt: Optional[str] = None):
     """
-    Get the cache for the inputs by running them through the model in batches.
-    Args:
-        hooked_model: The HookedTransformer model to run the inputs through.
-        tokenizer: The tokenizer to be used for tokenization.
-        inputs: List of input texts to be processed.
-        batch_size: The size of each batch to be processed.
-        system_prompt: Optional system prompt to be included in the formatted texts.
-    Returns:
-        A dictionary containing the cache of the model's activations for the inputs.
+    Get cache for inputs by running them through the model in batches.
+
+    Parameters
+    ----------
+    hooked_model : HookedTransformer
+        Model to run inputs through.
+    tokenizer : PreTrainedTokenizer
+        Tokenizer to use.
+    inputs : List[str]
+        Input texts to process.
+    batch_size : int, optional
+        Batch size.
+    system_prompt : Optional[str], optional
+        System prompt to include.
+
+    Returns
+    -------
+    dict
+        Cache of model activations for the inputs.
     """
     formatted_texts = format_texts(inputs, system_prompt)
     cache = defaultdict(list)
@@ -232,13 +288,21 @@ def get_cache(hooked_model: HookedTransformer, tokenizer: PreTrainedTokenizer, i
 
 def get_act_idx(cache_dict: dict[str, torch.Tensor], act_name: str, layer: int):
     """
-    Get the activation index from the cache dictionary based on the activation name and layer.
-    Args:
-        cache_dict: The cache dictionary containing the activations.
-        act_name: The name of the activation to be retrieved.
-        layer: The layer number from which the activation should be retrieved.
-    Returns:
-        The activation tensor corresponding to the specified activation name and layer.
+    Get activation index from cache dictionary by activation name and layer.
+
+    Parameters
+    ----------
+    cache_dict : dict[str, torch.Tensor]
+        Cache dictionary.
+    act_name : str
+        Activation name.
+    layer : int
+        Layer number.
+
+    Returns
+    -------
+    torch.Tensor or None
+        Activation tensor for the specified name and layer.
     """
     key = (act_name, layer)
     return cache_dict.get(utils.get_act_name(*key), None)
@@ -427,11 +491,16 @@ def calculate_activation_and_std(layer:str, layer_num:int, plot:bool=False):
 def vector_angle(v1: torch.Tensor, v2: torch.Tensor) -> float:
     """
     Calculate the angle in radians between two vectors.
-    Args:
-        v1: The first vector.
-        v2: The second vector.
-    Returns:
-        The angle in radians between the two vectors.
+    Parameters
+    ----------
+        v1 : torch.Tensor
+            The first vector.
+        v2 : torch.Tensor
+            The second vector.
+    Returns
+    -------
+        float
+            The angle in radians between the two vectors.
     """
     v1_norm = v1 / v1.norm()
     v2_norm = v2 / v2.norm()
@@ -448,14 +517,22 @@ def get_modified_matrix(
 ) -> Float[Tensor, "... d_model"]:
     """
     Modify the given matrix with respect to the benign and answer directions, scaling by their standard deviations.
-    Args:
-        matrix: The matrix to be orthogonalized.
-        benign_direction: The benign direction vector.
-        benign_std: The standard deviation for the benign direction.
-        answer_direction: The answer direction vector.
-        answer_std: The standard deviation for the answer direction.
-    Returns:
-        The orthogonalized matrix.
+    Parameters
+    ----------
+        matrix : Float[Tensor, "... d_model"]
+            The matrix to be orthogonalized.
+        benign_direction : Float[Tensor, "d_act"]
+            The benign direction vector.
+        benign_std : float
+            The standard deviation for the benign direction.
+        answer_direction : Float[Tensor, "d_act"]
+            The answer direction vector.
+        answer_std : float
+            The standard deviation for the answer direction.
+    Returns
+    -------
+        Float[Tensor, "... d_model"]
+            The orthogonalized matrix.
     """
     benign_proj = (
         (einops.einsum(matrix, benign_direction.view(-1, 1), "... d_model, d_model single -> ... single"))/benign_std*answer_std * answer_direction
@@ -468,14 +545,22 @@ def get_modified_matrix(
 def load_modified_model(hooked_model: HookedTransformer, benign_direction_list: list[dict[str, list[list[float]]]], benign_std_list: list[dict[str, list[float]]], answer_direction_list: list[dict[str, list[list[float]]]], answer_std_list: list[dict[str, list[float]]], selected_layer_list: list[dict[str, list[int]]]) -> HookedTransformer:
     """
     Load a modified model (IN PLACE) with the specified benign and answer directions and their standard deviations.
-    Args:
-        hooked_model: The original HookedTransformer model to be modified.
-        benign_direction_list: List of benign direction vectors for each iteration and each layer.
-        benign_std_list: List of standard deviations for the benign directions for each iteration and each layer.
-        answer_direction_list: List of answer direction vectors for each iteration and each layer.
-        answer_std_list: List of standard deviations for the answer directions for each iteration and each layer.
-    Returns:
-        The HookedTransformer model with the modified weights (IN PLACE).
+    Parameters
+    ----------
+        hooked_model : HookedTransformer
+            The original HookedTransformer model to be modified.
+        benign_direction_list : list[dict[str, list[list[float]]]]
+            List of benign direction vectors for each iteration and each layer.
+        benign_std_list : list[dict[str, list[float]]]
+            List of standard deviations for the benign directions for each iteration and each layer.
+        answer_direction_list : list[dict[str, list[list[float]]]]
+            List of answer direction vectors for each iteration and each layer.
+        answer_std_list : list[dict[str, list[float]]]
+            List of standard deviations for the answer directions for each iteration and each layer.
+    Returns
+    -------
+        HookedTransformer
+            The HookedTransformer model with the modified weights (IN PLACE).
     """
     for benign_activation, benign_std_dict, answer_activation, answer_std_dict, selected_layers in zip(benign_direction_list, benign_std_list, answer_direction_list, answer_std_list, selected_layer_list):
         for i, block in tqdm(enumerate(hooked_model.blocks), disable=True):
@@ -525,7 +610,7 @@ if __name__ == "__main__":
     # Load config
     config = LVSConfig.get_config()
     
-    # Init logger
+    # Initialize logger
     log_path = os.path.join(config.log_path, "loop_vector_steering", config.model_type)
     os.makedirs(log_path, exist_ok=True)
     logger.add(
@@ -541,7 +626,7 @@ if __name__ == "__main__":
     logger.remove(0)
     logger.info(f"Config: {config}")
     
-    # Init result directory and config file
+    # Initialize result directory and config file
     result_path = os.path.join(config.result_path, config.model_type)
     os.makedirs(result_path, exist_ok=True)
     config.save_yaml(os.path.join(result_path, "config.yaml"))
@@ -555,7 +640,7 @@ if __name__ == "__main__":
     open_model = OpenModel(hf_model, tokenizer, system_prompt)
     glue_eval = GLUEEval(model=hf_model, tokenizer=tokenizer, number_of_tests=256)
     
-    split_dataset_path = "dataset/split_dataset_1209"
+    split_dataset_path = "dataset/split_dataset"
     if not os.path.exists(split_dataset_path):
         os.makedirs(split_dataset_path)
     
@@ -574,15 +659,10 @@ if __name__ == "__main__":
         nq_val = pd.read_csv(os.path.join(split_dataset_path, "nq_val.csv"))["input"].tolist()
         nq_test = pd.read_csv(os.path.join(split_dataset_path, "nq_test.csv"))["input"].tolist()
     else:
-        # seval_attack = load_dataset("IS2Lab/S-Eval", "attack_set_en_small")["test"]["prompt"]
-        # seval_risk = load_dataset("IS2Lab/S-Eval", "base_risk_set_en_small")["test"]["prompt"]
-        # orfuzzset = pd.read_csv("/data1/zhn/or_modify/result/result_benchmark/merged_input_3.csv")["input"].tolist()
-        # nq_dataset = pd.read_csv("/data1/zhn/or_modify/dataset/nq.csv")["input"].tolist()
-        
-        seval_attack = pd.read_csv("/data1/zhn/or_modify/result_1209/gen_and_eval/seval_attack_sorted_result.csv")["input"].tolist()
-        seval_risk = pd.read_csv("/data1/zhn/or_modify/result_1209/gen_and_eval/seval_risk_sorted_result.csv")["input"].tolist()
-        orfuzzset = pd.read_csv("/data1/zhn/or_modify/result_1209/gen_and_eval/orfuzzset_sorted_result.csv")["input"].tolist()
-        nq_dataset = pd.read_csv("/data1/zhn/or_modify/result_1209/gen_and_eval/nq_sorted_result.csv")["input"].tolist()
+        seval_attack = pd.read_csv("/your_data_path/result/gen_and_eval/seval_attack_sorted_result.csv")["input"].tolist()
+        seval_risk = pd.read_csv("/your_data_path/result/gen_and_eval/seval_risk_sorted_result.csv")["input"].tolist()
+        orfuzzset = pd.read_csv("/your_data_path/result/gen_and_eval/orfuzzset_sorted_result.csv")["input"].tolist()
+        nq_dataset = pd.read_csv("/your_data_path/result/gen_and_eval/nq_sorted_result.csv")["input"].tolist()
         
         seval_attack = seval_attack[:500]
         seval_attack_train, seval_attack_val, seval_attack_test = split_texts(seval_attack)
@@ -605,7 +685,7 @@ if __name__ == "__main__":
         pd.DataFrame({"input": nq_train}).to_csv(os.path.join(split_dataset_path, "nq_train.csv"), index=False)
         pd.DataFrame({"input": nq_val}).to_csv(os.path.join(split_dataset_path, "nq_val.csv"), index=False)
         pd.DataFrame({"input": nq_test}).to_csv(os.path.join(split_dataset_path, "nq_test.csv"), index=False)
-    # logger.info(f"Loaded {len(original_toxic_train)} toxic training queries, {len(original_toxic_val)} toxic validation queries, {len(original_toxic_test)} toxic test queries, {len(original_benign_train)} benign training queries, {len(original_benign_val)} benign validation queries, {len(original_benign_test)} benign test queries.")
+    
     logger.info(f"Loaded {len(seval_attack_train)} seval attack training queries, {len(seval_attack_val)} seval attack validation queries, {len(seval_attack_test)} seval attack test queries, {len(seval_risk_train)} seval risk training queries, {len(seval_risk_val)} seval risk validation queries, {len(seval_risk_test)} seval risk test queries, {len(orfuzzset_train)} orfuzzset training queries, {len(orfuzzset_val)} orfuzzset validation queries, {len(orfuzzset_test)} orfuzzset test queries, {len(nq_train)} nq training queries, {len(nq_val)} nq validation queries, {len(nq_test)} nq test queries.")
     
     toxic_train_dict = {
@@ -634,12 +714,12 @@ if __name__ == "__main__":
     }
     
     # Load answer evaluator
-    # answer_eval_agent = QwenAnswerEvaluatorClient(get_server(config.server_url, config.server_port))
+    
     qwen_guard_eval_agent = QwenGuardEvaluatorClient(get_server(config.server_url, config.server_port))
     
     if config.kill_server:
         # Register cleanup function to be called on exit
-        # This will ensure that the server is properly shut down
+        
         atexit.register(cleanup)
         signal.signal(signal.SIGTERM, sig_handler)
         signal.signal(signal.SIGINT, sig_handler)
@@ -875,10 +955,7 @@ if __name__ == "__main__":
                 "glue": glue_result
             }, f, indent=4)
     else:
-        # logger.info(f"benign_val_answer_bools: {benign_val_answer_bools}")
-        # logger.info(f"average over refusal rate: {1-sum(benign_val_answer_bools) / len(benign_val_answer_bools)}")
-        # logger.info(f"toxic_val_answer_bools: {toxic_val_answer_bools}")
-        # logger.info(f"average toxic answer rate: {sum(toxic_val_answer_bools) / len(toxic_val_answer_bools)}")
+    
         for dataset_name, toxic_val in toxic_val_dict.items():
             logger.info(f"ASR for {dataset_name}: {sum(toxic_val_answer_bools[dataset_name]) / len(toxic_val_answer_bools[dataset_name])}")
         for dataset_name, benign_val in benign_val_dict.items():
@@ -940,18 +1017,13 @@ if __name__ == "__main__":
         for name in sampled_datasets:
             for status in ["answered", "unanswered"]:
                 inputs = sampled_datasets[name][status]["inputs"]
-                # if len(inputs) == 0:
-                #     error = True
-                #     break
+                
                 logger.info(f"Processing {name} {status} dataset with {len(inputs)} inputs")
                 cache = get_cache(hooked_model, tokenizer, inputs, batch_size=config.batch_size, system_prompt=SYS_PROMPT.get(config.model_type, None))
                 sampled_datasets[name][status]["cache"] = cache
         end_time = time.perf_counter()
         logger.info(f"Time taken to get cache: {end_time - start_time:.2f} seconds.")
-        # if error:
-        #     # If there are no data in one of the subset, increase the sample number in next iterations
-        #     config.n_samples += 16
-        #     continue
+        
         # Calculate the benign vector and answer vector for each layer
         logger.info("Calculating benign and answer vectors...")
         activation_layers = ["attn_out", "mlp_out"]
@@ -1031,7 +1103,7 @@ if __name__ == "__main__":
                     benign_activation[layer][l],
                     answer_activation[layer][l]
                 )
-                # logger.info(f"Layer {layer}, {l}: Angle between benign and answered activation: {angle:.4f} radians, {angle * 180 / 3.1415926:.4f} degrees")
+                
                 angles.append(angle * 180 / 3.1415926)
 
             plt.plot(range(hooked_model.cfg.n_layers), angles, marker='o', label=layer)
@@ -1191,7 +1263,7 @@ if __name__ == "__main__":
         logger.info(f"GLUE sst f1 score: {glue_result['sst']['f1']}")
         logger.info(f"GLUE sst MCC score: {glue_result['sst']['mcc']}")
         
-        # Save temperary results to avoid losing progress
+        # Save temporary results to avoid losing progress
         os.makedirs(os.path.join(result_path, f"iter_{iteration}"), exist_ok=True)
         with open(os.path.join(result_path, f"iter_{iteration}", "benign_direction.pkl"), "wb") as f:
             pickle.dump(benign_direction_list, f)
@@ -1304,10 +1376,7 @@ if __name__ == "__main__":
         logger.info("The original model performs the best, no need to load a modified model.")
     else:
         logger.info(f"Loading the modified model with the best F1 score from iteration {best_iter}...")
-        # benign_direction_list = json.load(open(os.path.join(result_path, f"iter_{best_iter}", "benign_direction.json"), "r"))
-        # answer_direction_list = json.load(open(os.path.join(result_path, f"iter_{best_iter}", "answer_direction.json"), "r"))
-        # benign_std_list = json.load(open(os.path.join(result_path, f"iter_{best_iter}", "benign_std.json"), "r"))
-        # answer_std_list = json.load(open(os.path.join(result_path, f"iter_{best_iter}", "answer_std.json"), "r"))
+        
         benign_direction_list = pickle.load(open(os.path.join(result_path, f"iter_{best_iter}", "benign_direction.pkl"), "rb"))
         answer_direction_list = pickle.load(open(os.path.join(result_path, f"iter_{best_iter}", "answer_direction.pkl"), "rb"))
         benign_std_list = pickle.load(open(os.path.join(result_path, f"iter_{best_iter}", "benign_std.pkl"), "rb"))
