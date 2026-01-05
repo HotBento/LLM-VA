@@ -12,7 +12,7 @@ conda activate llmva
 pip install -r requirements.txt
 ```
 
-"flash-attn==2.8.2" needs to be installed separately in `https://github.com/Dao-AILab/flash-attention`.
+"flash-attn==2.8.2" needs to be installed separately in [Flash-Attn](https://github.com/Dao-AILab/flash-attention).
 
 
 ## Usage
