@@ -1,5 +1,5 @@
 # LLM-VA: Large Language Model Vector Alignment
-This repository contains the code for the paper "LLM-VA: Resolving the Jailbreak-Overrefusal Trade-off via Vector Alignment".
+This repository contains the code for the paper "LLM-VA: Resolving the Jailbreak-Overrefusal Trade-off via Vector Alignment" (ACL 2026 Main Conference).
 
 ## Setup
 ```bash
